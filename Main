@@ -1,0 +1,103 @@
+#3 
+
+# had to create a apoc.conf file. 
+
+apoc.import.file.enabled=true
+
+
+CALL apoc.load.json('file:///BOOKSDATA.json') YIELD value AS data
+RETURN data;
+
+#Tested to see if works. 
+
+CALL apoc.load.json('file:///BOOKSDATA.json') YIELD value AS data
+
+CALL apoc.load.json('file:///BOOKSDATA.json') YIELD value AS data
+RETURN data
+LIMIT 20;
+
+
+MATCH (n)
+DETACH DELETE n
+
+########################
+
+CALL apoc.load.json('file:///BOOKSDATA.json') YIELD value AS data
+UNWIND data AS bookData
+MERGE (b:Book {
+    isbn: bookData.isbn,
+    title: bookData.title,
+    price: bookData.price,
+    date: datetime({ epochMillis: apoc.date.parse(bookData.date, 'ms', 'MM/dd/yyyy') }) 
+})
+WITH b, bookData.publisher AS publisherData
+MERGE (p:Publisher { 
+    name: publisherData.name,
+    phone: publisherData.phone,
+    country: publisherData.address.country,
+    city: publisherData.address.city,
+    street: publisherData.address.street,
+    number: publisherData.address.number
+})
+MERGE (b)-[:PUBLISHED_BY]->(p)
+RETURN b, p
+LIMIT 20;
+
+
+CALL apoc.load.json('file:///BOOKSDATA.json') YIELD value AS data
+UNWIND data AS bookData2
+UNWIND bookData2.authors AS authorData
+MERGE (a:Author {
+    last_name: authorData.last,
+    first_name: authorData.first,
+    age: authorData.age
+});
+
+
+MATCH (a:Author)
+RETURN DISTINCT a
+LIMIT 20;
+
+CALL apoc.load.json('file:///BOOKSDATA.json') YIELD value AS data
+UNWIND data AS bookData3
+MATCH (b:Book { isbn: bookData3.isbn })
+UNWIND bookData3.authors AS authorData
+MATCH (a:Author { last_name: authorData.last, first_name: authorData.first })
+MERGE (a)-[:AUTHOR_OF]->(b);
+
+**************
+
+
+
+#4. 
+
+#1
+MATCH (b:Book)
+WHERE b.date >= datetime('2017-01-01') AND b.date <= datetime('2017-12-31') AND b.price < 20
+RETURN b.title, b.price, b.date
+ORDER BY b.price;
+
+
+#2
+
+MATCH (a:Author)-[:AUTHOR_OF]->(:Book)-[:PUBLISHED_BY]->(p:Publisher)
+WHERE p.country = 'Germany'
+RETURN DISTINCT a.first_name, a.last_name, p.name AS publisher_name, p.city AS publisher_city;
+
+
+#3
+MATCH (b:Book)<-[:AUTHOR_OF]-(a:Author)
+WHERE a.age > 35
+WITH b, COLLECT(DISTINCT a) AS authors, COUNT(DISTINCT a) AS authorCount
+MATCH (b)<-[:AUTHOR_OF]-(a2:Author)
+WITH b, authors, authorCount, COUNT(DISTINCT a2) AS allAuthorsCount
+WHERE authorCount = allAuthorsCount
+MATCH (b)-[:PUBLISHED_BY]->(p:Publisher)
+RETURN DISTINCT p.name, p.city, [author IN authors | author.age] AS authorAges;
+
+
+#4
+MATCH (a1:Author)-[:AUTHOR_OF]->(b:Book)<-[:AUTHOR_OF]-(a2:Author)
+WHERE id(a1) < id(a2) 
+RETURN DISTINCT a1.first_name + ' ' + a1.last_name AS author1,
+                a2.first_name + ' ' + a2.last_name AS author2;
